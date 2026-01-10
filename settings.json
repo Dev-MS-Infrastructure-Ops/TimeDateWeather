@@ -1,0 +1,187 @@
+{
+    "active_instances": [
+        "instance_2"
+    ],
+    "instances": {
+        "instance_2": {
+            "location": {
+                "zip_code": "80701",
+                "country": "US"
+            },
+            "weather": {
+                "show_attribution": true,
+                "display_format": "standard",
+                "format_strings": {
+                    "standard": "%C+%t+%w",
+                    "simple": "%C+%t",
+                    "detailed": "%C+%t+|+%w+|+%h",
+                    "minimal": "%t"
+                }
+            },
+            "fonts": {
+                "family": "Segoe UI",
+                "time_size": 69,
+                "date_size": 19,
+                "weather_size": 19,
+                "status_size": 11
+            },
+            "colors": {
+                "text": "#ffff80",
+                "status": "#ff0000",
+                "shadow": "#000000",
+                "lock_colors": true,
+                "time_color": "#ffffff",
+                "date_color": "#ffffff",
+                "weather_color": "#ffffff"
+            },
+            "appearance": {
+                "opacity": 1.0,
+                "scale": 1.0
+            },
+            "display": {
+                "use_24h_format": true,
+                "show_seconds": true,
+                "launch_at_boot": false,
+                "hourly_chime": true
+            },
+            "spacing": {
+                "status_x": 30,
+                "status_y": 10,
+                "time_x": 73,
+                "time_y": 0,
+                "date_x": 79,
+                "date_y": 93,
+                "weather_x": 65,
+                "weather_y": 114
+            },
+            "position": {
+                "x": 4179,
+                "y": -139
+            },
+            "updates": {
+                "time_interval": 1000,
+                "weather_interval": 1140000
+            }
+        },
+        "instance_3": {
+            "location": {
+                "zip_code": "80701",
+                "country": "US"
+            },
+            "weather": {
+                "show_attribution": true,
+                "display_format": "standard",
+                "format_strings": {
+                    "standard": "%C+%t+%w",
+                    "simple": "%C+%t",
+                    "detailed": "%C+%t+|+%w+|+%h",
+                    "minimal": "%t"
+                }
+            },
+            "fonts": {
+                "family": "Segoe UI",
+                "time_size": 69,
+                "date_size": 19,
+                "weather_size": 19,
+                "status_size": 11
+            },
+            "colors": {
+                "text": "#ffff80",
+                "status": "#ff0000",
+                "shadow": "#000000",
+                "lock_colors": true,
+                "time_color": "#ffffff",
+                "date_color": "#ffffff",
+                "weather_color": "#ffffff"
+            },
+            "appearance": {
+                "opacity": 1.0,
+                "scale": 1.0
+            },
+            "display": {
+                "use_24h_format": true,
+                "show_seconds": true,
+                "launch_at_boot": false,
+                "hourly_chime": true
+            },
+            "spacing": {
+                "status_x": 30,
+                "status_y": 10,
+                "time_x": 73,
+                "time_y": 0,
+                "date_x": 79,
+                "date_y": 93,
+                "weather_x": 65,
+                "weather_y": 114
+            },
+            "position": {
+                "x": 50,
+                "y": 50
+            },
+            "updates": {
+                "time_interval": 1000,
+                "weather_interval": 1140000
+            }
+        },
+        "instance_1": {
+            "location": {
+                "zip_code": "80701",
+                "country": "US"
+            },
+            "weather": {
+                "show_attribution": true,
+                "display_format": "standard",
+                "format_strings": {
+                    "standard": "%C+%t+%w",
+                    "simple": "%C+%t",
+                    "detailed": "%C+%t+|+%w+|+%h",
+                    "minimal": "%t"
+                }
+            },
+            "fonts": {
+                "family": "Segoe UI",
+                "time_size": 69,
+                "date_size": 19,
+                "weather_size": 19,
+                "status_size": 11
+            },
+            "colors": {
+                "text": "#ffff80",
+                "status": "#ff0000",
+                "shadow": "#000000",
+                "lock_colors": true,
+                "time_color": "#ffffff",
+                "date_color": "#ffffff",
+                "weather_color": "#ffffff"
+            },
+            "appearance": {
+                "opacity": 1.0,
+                "scale": 1.0
+            },
+            "display": {
+                "use_24h_format": true,
+                "show_seconds": true,
+                "launch_at_boot": false,
+                "hourly_chime": true
+            },
+            "spacing": {
+                "status_x": 30,
+                "status_y": 10,
+                "time_x": 73,
+                "time_y": 0,
+                "date_x": 79,
+                "date_y": 93,
+                "weather_x": 65,
+                "weather_y": 114
+            },
+            "position": {
+                "x": 3825,
+                "y": -380
+            },
+            "updates": {
+                "time_interval": 1000,
+                "weather_interval": 1140000
+            }
+        }
+    }
+}

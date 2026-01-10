@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather/**)",
+      "Write(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather/**)",
+      "Edit(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather/**)",
+      "Glob(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather/**)",
+      "Grep(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather/**)",
+      "Read(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather\\.auto-claude\\ideation/**)",
+      "Write(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather\\.auto-claude\\ideation/**)",
+      "Edit(C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather\\.auto-claude\\ideation/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}
