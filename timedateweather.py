@@ -10,6 +10,34 @@ import sys
 import winsound
 from config_manager import ConfigManager
 
+# Application version
+APP_VERSION = "1.0.0"
+
+# Weather condition to emoji mapping
+WEATHER_EMOJIS = {
+    "sunny": "\u2600\ufe0f",      # Sun
+    "clear": "\u2600\ufe0f",      # Sun (for clear day)
+    "partly cloudy": "\u26c5",    # Sun behind cloud
+    "cloudy": "\u2601\ufe0f",     # Cloud
+    "overcast": "\u2601\ufe0f",   # Cloud
+    "mist": "\ud83c\udf2b\ufe0f", # Fog
+    "fog": "\ud83c\udf2b\ufe0f",  # Fog
+    "light rain": "\ud83c\udf27\ufe0f",   # Cloud with rain
+    "rain": "\ud83c\udf27\ufe0f",         # Cloud with rain
+    "heavy rain": "\ud83c\udf27\ufe0f",   # Cloud with rain
+    "drizzle": "\ud83c\udf26\ufe0f",      # Sun behind rain cloud
+    "thunderstorm": "\u26c8\ufe0f",       # Thunder cloud
+    "thunder": "\u26c8\ufe0f",            # Thunder cloud
+    "snow": "\u2744\ufe0f",               # Snowflake
+    "light snow": "\ud83c\udf28\ufe0f",   # Cloud with snow
+    "heavy snow": "\u2744\ufe0f",         # Snowflake
+    "sleet": "\ud83c\udf28\ufe0f",        # Cloud with snow
+    "hail": "\ud83c\udf28\ufe0f",         # Cloud with snow
+    "windy": "\ud83d\udca8",              # Dash (wind)
+    "hot": "\ud83c\udf21\ufe0f",          # Thermometer
+    "cold": "\u2744\ufe0f",               # Snowflake
+}
+
 # ==========================================
 #              CONFIGURATION
 # ==========================================
@@ -65,20 +93,21 @@ class DesktopWidget:
         except Exception:
             pass
 
-        # Create context menu
+        # Create context menu with keyboard shortcut hints
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.lock_var = tk.BooleanVar(value=False)
         self.topmost_var = tk.BooleanVar(value=False)
         self.time_24h_var = tk.BooleanVar(value=self.config.get('display', 'use_24h_format'))
         self.show_seconds_var = tk.BooleanVar(value=self.config.get('display', 'show_seconds'))
-        self.context_menu.add_command(label="Refresh Weather", command=self.manual_weather_refresh)
+        self.context_menu.add_command(label="Refresh Weather (Ctrl+R)", command=self.manual_weather_refresh)
         self.context_menu.add_separator()
-        self.context_menu.add_checkbutton(label="Lock Position", variable=self.lock_var, command=self.toggle_lock)
+        self.context_menu.add_checkbutton(label="Lock Position (Ctrl+L)", variable=self.lock_var, command=self.toggle_lock)
         self.context_menu.add_checkbutton(label="Keep on Top", variable=self.topmost_var, command=self.toggle_topmost)
         self.context_menu.add_checkbutton(label="24-Hour Format", variable=self.time_24h_var, command=self.toggle_time_format)
         self.context_menu.add_checkbutton(label="Show Seconds", variable=self.show_seconds_var, command=self.toggle_show_seconds)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Settings...", command=self.open_settings)
+        self.context_menu.add_command(label="Settings... (Ctrl+S)", command=self.open_settings)
+        self.context_menu.add_command(label="About...", command=self.show_about)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Launch New Instance", command=self.launch_new_instance)
         self.context_menu.add_command(label="Exit This Instance", command=self.on_exit)
@@ -92,7 +121,11 @@ class DesktopWidget:
         self.root.bind("<B1-Motion>", self.on_drag)
         self.root.bind("<ButtonRelease-1>", self.end_drag)  # Save position on drag end
         self.root.bind("<Button-3>", self.show_context_menu)  # Right-click for menu
+
+        # Keyboard shortcuts
         self.root.bind("<Control-l>", self.toggle_lock)  # Ctrl+L to lock/unlock
+        self.root.bind("<Control-r>", lambda e: self.manual_weather_refresh())  # Ctrl+R to refresh weather
+        self.root.bind("<Control-s>", lambda e: self.open_settings())  # Ctrl+S for settings
 
         # Exit handler for smart position save dialog
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
@@ -173,6 +206,9 @@ class DesktopWidget:
         self.update_time()
         self.get_weather() # Initial call
 
+        # Ensure widget is visible on screen (multi-monitor awareness)
+        self.root.after(100, self.ensure_on_screen)
+
         # Clear initial status message after 3 seconds
         self.root.after(3000, self.clear_status_message)
 
@@ -185,7 +221,8 @@ class DesktopWidget:
     def create_text(self, x, y, text, size, bold, color=None):
         # Helper to draw shadow and text on top of clickarea (scaled)
         scaled_size = int(size * self.scale)
-        shadow_offset = int(2 * self.scale)
+        shadow_offset_x = int(self.config.get('appearance', 'shadow_offset_x') * self.scale)
+        shadow_offset_y = int(self.config.get('appearance', 'shadow_offset_y') * self.scale)
         font_spec = (self.config.get('fonts', 'family'), scaled_size, "bold" if bold else "normal")
 
         # Use provided color or fallback to text color
@@ -193,7 +230,7 @@ class DesktopWidget:
             color = self.config.get('colors', 'text')
 
         # Shadow (raise to top layer with shadow tag)
-        shadow = self.canvas.create_text(x+shadow_offset, y+shadow_offset, text=text, font=font_spec, fill=self.config.get('colors', 'shadow'), anchor="nw", tags=("shadow", f"shadow_{y}"))
+        shadow = self.canvas.create_text(x+shadow_offset_x, y+shadow_offset_y, text=text, font=font_spec, fill=self.config.get('colors', 'shadow'), anchor="nw", tags=("shadow", f"shadow_{y}"))
         self.canvas.tag_raise(shadow)
         # Main Text (raise to top layer with text tag)
         text_id = self.canvas.create_text(x, y, text=text, font=font_spec, fill=color, anchor="nw", tags="text")
@@ -233,6 +270,8 @@ class DesktopWidget:
         if not self.is_locked:
             x = self.root.winfo_x() + (event.x - self.drag_start_x)
             y = self.root.winfo_y() + (event.y - self.drag_start_y)
+            # Apply snap-to-edge
+            x, y = self.snap_to_edge(x, y)
             self.root.geometry(f"+{x}+{y}")
             # Mark that position has changed
             self.position_changed_since_save = True
@@ -315,7 +354,10 @@ class DesktopWidget:
                 time_str = time.strftime("%I:%M:%S %p", now).lstrip("0")  # 12-hour with seconds (e.g., "2:30:45 PM")
             else:
                 time_str = time.strftime("%I:%M %p", now).lstrip("0")  # 12-hour without seconds (e.g., "2:30 PM")
-        date_str = time.strftime("%A, %B %d", now)
+
+        # Use configurable date format
+        date_format = self.config.get('display', 'date_format') or "%A, %B %d"
+        date_str = time.strftime(date_format, now)
 
         # Check for top of hour chime
         if self.config.get('display', 'hourly_chime'):
@@ -346,27 +388,53 @@ class DesktopWidget:
     def fetch_weather_data(self):
         try:
             # Using wttr.in (free, no API key required)
-            # Get format string based on user preference
-            display_format = self.config.get('weather', 'display_format')
-            format_strings = self.config.get('weather', 'format_strings')
-            format_string = format_strings.get(display_format, "%C+%t+%w")
-
             zip_code = self.config.get('location', 'zip_code')
-            url = f"https://wttr.in/{zip_code}?format={format_string}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
-                data = response.read().decode("utf-8").strip()
 
-            # Add attribution if enabled
-            if self.config.get('weather', 'show_attribution'):
-                self.weather_text = f"{data}"
+            # Check if forecast is enabled
+            if self.config.get('weather', 'show_forecast'):
+                # Fetch forecast data (today + tomorrow)
+                forecast_days = self.config.get('weather', 'forecast_days') or 1
+                url = f"https://wttr.in/{zip_code}?format=%C+%t+%w"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    today_data = response.read().decode("utf-8").strip()
+
+                # Get tomorrow's forecast
+                url_tomorrow = f"https://wttr.in/{zip_code}?format=%C+%t&1"
+                req_tomorrow = urllib.request.Request(url_tomorrow, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req_tomorrow) as response:
+                    tomorrow_data = response.read().decode("utf-8").strip()
+
+                data = f"{today_data} | Tomorrow: {tomorrow_data}"
             else:
-                self.weather_text = data
+                # Get format string based on user preference
+                display_format = self.config.get('weather', 'display_format')
+                format_strings = self.config.get('weather', 'format_strings')
+                format_string = format_strings.get(display_format, "%C+%t+%w")
+
+                url = f"https://wttr.in/{zip_code}?format={format_string}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    data = response.read().decode("utf-8").strip()
+
+            # Add weather emoji if enabled
+            if self.config.get('weather', 'show_emoji'):
+                data = self._add_weather_emoji(data)
+
+            self.weather_text = data
         except Exception as e:
             self.weather_text = "Weather Unavailable"
 
         # Schedule UI update on main thread
         self.root.after(0, self.update_weather_ui)
+
+    def _add_weather_emoji(self, weather_text):
+        """Add emoji based on weather condition in the text."""
+        weather_lower = weather_text.lower()
+        for condition, emoji in WEATHER_EMOJIS.items():
+            if condition in weather_lower:
+                return f"{emoji} {weather_text}"
+        return weather_text
 
     def update_weather_ui(self):
         self.canvas.itemconfigure(self.weather_id, text=self.weather_text)
@@ -403,13 +471,135 @@ class DesktopWidget:
             # Silent failure - no error dialogs
             pass
 
+    def show_about(self):
+        """Show the About dialog with version and shortcut information."""
+        about_text = f"""TimeDateWeather Desktop Widget
+Version {APP_VERSION}
+
+A lightweight, customizable desktop widget displaying:
+  \u2022 Current time (12/24 hour format)
+  \u2022 Date (multiple format options)
+  \u2022 Local weather from wttr.in
+
+Keyboard Shortcuts:
+  Ctrl+L - Lock/Unlock position
+  Ctrl+R - Refresh weather
+  Ctrl+S - Open settings
+
+Features:
+  \u2022 Multiple widget instances
+  \u2022 Theme presets
+  \u2022 Weather emojis
+  \u2022 Hourly chime
+  \u2022 Auto-start with Windows
+
+Right-click the widget for quick options."""
+        messagebox.showinfo("About TimeDateWeather", about_text)
+
+    def ensure_on_screen(self):
+        """Ensure widget is visible on at least one monitor."""
+        try:
+            # Get widget bounds
+            widget_x = self.root.winfo_x()
+            widget_y = self.root.winfo_y()
+
+            # Get virtual screen bounds (all monitors combined) using Windows API
+            user32 = ctypes.windll.user32
+            # SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77
+            virtual_x = user32.GetSystemMetrics(76)
+            virtual_y = user32.GetSystemMetrics(77)
+            # SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79
+            virtual_width = user32.GetSystemMetrics(78)
+            virtual_height = user32.GetSystemMetrics(79)
+
+            # Ensure at least 100px of widget is visible
+            min_visible = 100
+            new_x = widget_x
+            new_y = widget_y
+
+            # Check horizontal bounds
+            if widget_x < virtual_x - self.canvas_width + min_visible:
+                new_x = virtual_x
+            elif widget_x > virtual_x + virtual_width - min_visible:
+                new_x = virtual_x + virtual_width - self.canvas_width
+
+            # Check vertical bounds
+            if widget_y < virtual_y - self.canvas_height + min_visible:
+                new_y = virtual_y
+            elif widget_y > virtual_y + virtual_height - min_visible:
+                new_y = virtual_y + virtual_height - self.canvas_height
+
+            # Reposition if needed
+            if new_x != widget_x or new_y != widget_y:
+                self.root.geometry(f"+{new_x}+{new_y}")
+                self.show_status_message("Widget repositioned to visible area")
+                return True
+            return False
+        except Exception:
+            # Fallback to primary screen if Windows API fails
+            try:
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+                widget_x = self.root.winfo_x()
+                widget_y = self.root.winfo_y()
+
+                new_x = max(0, min(widget_x, screen_width - 100))
+                new_y = max(0, min(widget_y, screen_height - 50))
+
+                if new_x != widget_x or new_y != widget_y:
+                    self.root.geometry(f"+{new_x}+{new_y}")
+                    return True
+            except Exception:
+                pass
+            return False
+
+    def snap_to_edge(self, x, y):
+        """Snap widget to screen edges if within snap distance."""
+        if not self.config.get('display', 'snap_to_edges'):
+            return x, y
+
+        snap_distance = self.config.get('display', 'snap_distance') or 15
+
+        try:
+            # Get screen dimensions
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            widget_width = self.canvas_width
+            widget_height = self.canvas_height
+
+            # Snap to left edge
+            if abs(x) < snap_distance:
+                x = 0
+            # Snap to right edge
+            elif abs(x + widget_width - screen_width) < snap_distance:
+                x = screen_width - widget_width
+
+            # Snap to top edge
+            if abs(y) < snap_distance:
+                y = 0
+            # Snap to bottom edge
+            elif abs(y + widget_height - screen_height) < snap_distance:
+                y = screen_height - widget_height
+
+        except Exception:
+            pass
+
+        return x, y
+
+    def show_status_message(self, message, duration=3000):
+        """Show a temporary status message."""
+        self.status_text = message
+        self.update_status_ui()
+        self.root.after(duration, self.clear_status_message)
+
     def show_settings_border(self, show=True):
         """Show or hide border around canvas when settings menu is open."""
         try:
             self.settings_border_visible = show
             if show:
-                # Add a visible border
-                self.canvas.config(highlightthickness=2, highlightbackground="#ffff00")
+                # Add a visible border using configurable color
+                border_color = self.config.get('ui', 'settings_border_color') or "#ffff00"
+                self.canvas.config(highlightthickness=2, highlightbackground=border_color)
             else:
                 # Remove border
                 self.canvas.config(highlightthickness=0)
@@ -420,8 +610,9 @@ class DesktopWidget:
     def show_new_instance_highlight(self):
         """Show animated highlight border for new instances."""
         try:
-            # Pulsing green border to indicate new instance
-            self.canvas.config(highlightthickness=3, highlightbackground="#00ff00")
+            # Pulsing border to indicate new instance using configurable color
+            highlight_color = self.config.get('ui', 'new_instance_color') or "#00ff00"
+            self.canvas.config(highlightthickness=3, highlightbackground=highlight_color)
             self.highlight_pulse_state = 0
             self.pulse_highlight()
         except Exception:
@@ -433,8 +624,10 @@ class DesktopWidget:
             return
 
         try:
-            # Alternate between bright and dim green
-            colors = ["#00ff00", "#00aa00", "#00ff00", "#00cc00"]
+            # Alternate between bright and dim colors using config
+            bright_color = self.config.get('ui', 'new_instance_color') or "#00ff00"
+            dim_color = self.config.get('ui', 'new_instance_color_dim') or "#00aa00"
+            colors = [bright_color, dim_color, bright_color, dim_color]
             self.highlight_pulse_state = (self.highlight_pulse_state + 1) % len(colors)
             self.canvas.config(highlightbackground=colors[self.highlight_pulse_state])
 

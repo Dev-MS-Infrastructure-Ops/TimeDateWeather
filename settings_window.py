@@ -4,8 +4,10 @@ Provides GUI for configuring all widget settings with hybrid preview mode.
 """
 
 import tkinter as tk
-from tkinter import ttk, colorchooser, messagebox
+from tkinter import ttk, colorchooser, messagebox, filedialog
 from config_manager import ConfigManager
+from themes import THEMES, get_theme, get_theme_names, apply_theme_to_config
+from notifications import ToolTip, show_toast
 
 
 class SettingsWindow:
@@ -174,10 +176,95 @@ class SettingsWindow:
 
     def reload_all_settings(self):
         """Reload all settings from the currently selected instance."""
-        # This would need to reload all the UI elements with new config values
-        # For now, we'll just show a message that they should reopen settings
-        # A full implementation would recreate all the tabs
-        pass
+        try:
+            # Reload location settings
+            self.zip_entry.delete(0, tk.END)
+            self.zip_entry.insert(0, self.config.get('location', 'zip_code'))
+
+            self.country_entry.delete(0, tk.END)
+            self.country_entry.insert(0, self.config.get('location', 'country'))
+
+            # Reload weather interval
+            current_interval = self.config.get('updates', 'weather_interval') // 60000
+            self.weather_interval_var.set(current_interval)
+
+            # Reload weather display settings
+            current_format = self.config.get('weather', 'display_format')
+            if current_format in self.format_map_reverse:
+                self.weather_format_var.set(self.format_map_reverse[current_format])
+
+            self.show_weather_attribution_var.set(self.config.get('weather', 'show_attribution'))
+            self.show_emoji_var.set(self.config.get('weather', 'show_emoji'))
+            self.show_forecast_var.set(self.config.get('weather', 'show_forecast'))
+
+            # Reload font settings
+            self.font_family_var.set(self.config.get('fonts', 'family'))
+            self.time_size_var.set(self.config.get('fonts', 'time_size'))
+            self.date_size_var.set(self.config.get('fonts', 'date_size'))
+            self.weather_size_var.set(self.config.get('fonts', 'weather_size'))
+
+            # Reload color settings
+            self.text_color_var.set(self.config.get('colors', 'text'))
+            self.shadow_color_var.set(self.config.get('colors', 'shadow'))
+            self.status_color_var.set(self.config.get('colors', 'status'))
+            self.lock_colors_var.set(self.config.get('colors', 'lock_colors'))
+            self.time_color_var.set(self.config.get('colors', 'time_color'))
+            self.date_color_var.set(self.config.get('colors', 'date_color'))
+            self.weather_color_var.set(self.config.get('colors', 'weather_color'))
+
+            # Update color buttons
+            self.text_color_btn.config(bg=self.text_color_var.get())
+            self.shadow_color_btn.config(bg=self.shadow_color_var.get())
+            self.status_color_btn.config(bg=self.status_color_var.get())
+            self.time_color_btn.config(bg=self.time_color_var.get())
+            self.date_color_btn.config(bg=self.date_color_var.get())
+            self.weather_color_btn.config(bg=self.weather_color_var.get())
+
+            # Reload appearance settings
+            self.opacity_var.set(self.config.get('appearance', 'opacity'))
+            self.scale_var.set(self.config.get('appearance', 'scale'))
+            self.shadow_offset_x_var.set(self.config.get('appearance', 'shadow_offset_x'))
+            self.shadow_offset_y_var.set(self.config.get('appearance', 'shadow_offset_y'))
+
+            # Reload theme
+            current_theme = self.config.get('appearance', 'theme') or 'default'
+            if current_theme in THEMES:
+                self.theme_var.set(THEMES[current_theme]['name'])
+            else:
+                self.theme_var.set('Custom')
+
+            # Reload spacing settings
+            self.status_x_var.set(self.config.get('spacing', 'status_x'))
+            self.status_y_var.set(self.config.get('spacing', 'status_y'))
+            self.time_x_var.set(self.config.get('spacing', 'time_x'))
+            self.time_y_var.set(self.config.get('spacing', 'time_y'))
+            self.date_x_var.set(self.config.get('spacing', 'date_x'))
+            self.date_y_var.set(self.config.get('spacing', 'date_y'))
+            self.weather_x_var.set(self.config.get('spacing', 'weather_x'))
+            self.weather_y_var.set(self.config.get('spacing', 'weather_y'))
+            self.center_x_var.set(self.config.get('spacing', 'time_x'))
+            self.center_y_var.set(self.config.get('spacing', 'time_y'))
+
+            # Reload display settings
+            self.use_24h_var.set(self.config.get('display', 'use_24h_format'))
+            self.show_seconds_var.set(self.config.get('display', 'show_seconds'))
+            self.hourly_chime_var.set(self.config.get('display', 'hourly_chime'))
+            self.launch_at_boot_var.set(self.config.get('display', 'launch_at_boot'))
+            self.snap_to_edges_var.set(self.config.get('display', 'snap_to_edges'))
+
+            # Reload date format
+            current_date_format = self.config.get('display', 'date_format') or "%A, %B %d"
+            if current_date_format in self.date_format_map_reverse:
+                self.date_format_var.set(self.date_format_map_reverse[current_date_format])
+
+            # Toggle color lock visibility
+            self.toggle_color_lock()
+
+            # Update original config for cancel
+            self.original_config = self._deep_copy_config()
+
+        except Exception:
+            pass  # Silent failure
 
     def create_location_tab(self):
         """Location settings: ZIP code, country, weather update interval."""
@@ -258,10 +345,31 @@ class SettingsWindow:
             row=6, column=0, columnspan=2, sticky="w", padx=10, pady=5
         )
 
+        # Show Weather Emoji
+        self.show_emoji_var = tk.BooleanVar(value=self.config.get('weather', 'show_emoji'))
+        emoji_check = ttk.Checkbutton(tab, text='Show weather emoji icons',
+                       variable=self.show_emoji_var)
+        emoji_check.grid(row=7, column=0, columnspan=2, sticky="w", padx=10, pady=5)
+        ToolTip(emoji_check, "Display weather condition emojis (sun, cloud, rain, etc.)")
+
+        # Separator before forecast
+        ttk.Separator(tab, orient='horizontal').grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+
+        # Forecast Options
+        ttk.Label(tab, text="Forecast:", font=("Segoe UI", 10, "bold")).grid(
+            row=9, column=0, sticky="w", padx=10, pady=(5, 5)
+        )
+
+        self.show_forecast_var = tk.BooleanVar(value=self.config.get('weather', 'show_forecast'))
+        forecast_check = ttk.Checkbutton(tab, text="Show tomorrow's forecast",
+                       variable=self.show_forecast_var)
+        forecast_check.grid(row=10, column=0, columnspan=2, sticky="w", padx=10, pady=5)
+        ToolTip(forecast_check, "Display both current weather and tomorrow's forecast")
+
         # Info label
         info_text = "Note: Location changes require 'Apply' or 'Save' to take effect."
         ttk.Label(tab, text=info_text, font=("Segoe UI", 9), foreground="gray").grid(
-            row=7, column=0, columnspan=2, sticky="w", padx=10, pady=20
+            row=11, column=0, columnspan=2, sticky="w", padx=10, pady=20
         )
 
     def create_appearance_tab(self):
@@ -286,6 +394,30 @@ class SettingsWindow:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         row = 0
+
+        # Theme Preset Selector
+        ttk.Label(scrollable_frame, text="Theme Preset:", font=("Segoe UI", 10, "bold")).grid(
+            row=row, column=0, sticky="w", padx=10, pady=(10, 5)
+        )
+        row += 1
+
+        theme_names = ["Custom"] + [t["name"] for t in THEMES.values()]
+        current_theme = self.config.get('appearance', 'theme') or 'default'
+        current_theme_name = THEMES.get(current_theme, {}).get('name', 'Custom')
+
+        self.theme_var = tk.StringVar(value=current_theme_name)
+        theme_combo = ttk.Combobox(scrollable_frame, textvariable=self.theme_var,
+                                   values=theme_names, state="readonly", width=25)
+        theme_combo.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=5)
+        theme_combo.bind("<<ComboboxSelected>>", self.on_theme_selected)
+        ToolTip(theme_combo, "Select a pre-configured color scheme")
+        row += 1
+
+        # Separator
+        ttk.Separator(scrollable_frame, orient='horizontal').grid(
+            row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=10
+        )
+        row += 1
 
         # Font Family
         ttk.Label(scrollable_frame, text="Font Family:", font=("Segoe UI", 10, "bold")).grid(
@@ -521,6 +653,41 @@ class SettingsWindow:
         scale_slider = ttk.Scale(scale_frame, from_=0.5, to=3.0, orient=tk.HORIZONTAL, variable=self.scale_var,
                                 command=lambda v: self.apply_instant_preview())
         scale_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ToolTip(scale_slider, "Overall widget size multiplier (0.5 = half size, 2.0 = double size)")
+        row += 1
+
+        # Shadow Offset
+        ttk.Label(scrollable_frame, text="Shadow Offset:", font=("Segoe UI", 10, "bold")).grid(
+            row=row, column=0, sticky="w", padx=10, pady=(15, 5)
+        )
+        row += 1
+
+        # Shadow X Offset
+        shadow_x_frame = ttk.Frame(scrollable_frame)
+        shadow_x_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        ttk.Label(shadow_x_frame, text="Shadow X:", font=("Segoe UI", 9), width=12).pack(side=tk.LEFT)
+        self.shadow_offset_x_var = tk.IntVar(value=self.config.get('appearance', 'shadow_offset_x'))
+        shadow_x_entry = ttk.Entry(shadow_x_frame, textvariable=self.shadow_offset_x_var, width=6)
+        shadow_x_entry.pack(side=tk.LEFT, padx=(0, 10))
+        shadow_x_slider = ttk.Scale(shadow_x_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+                                    variable=self.shadow_offset_x_var,
+                                    command=lambda v: self.apply_instant_preview())
+        shadow_x_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ToolTip(shadow_x_slider, "Horizontal shadow offset (pixels)")
+        row += 1
+
+        # Shadow Y Offset
+        shadow_y_frame = ttk.Frame(scrollable_frame)
+        shadow_y_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        ttk.Label(shadow_y_frame, text="Shadow Y:", font=("Segoe UI", 9), width=12).pack(side=tk.LEFT)
+        self.shadow_offset_y_var = tk.IntVar(value=self.config.get('appearance', 'shadow_offset_y'))
+        shadow_y_entry = ttk.Entry(shadow_y_frame, textvariable=self.shadow_offset_y_var, width=6)
+        shadow_y_entry.pack(side=tk.LEFT, padx=(0, 10))
+        shadow_y_slider = ttk.Scale(shadow_y_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+                                    variable=self.shadow_offset_y_var,
+                                    command=lambda v: self.apply_instant_preview())
+        shadow_y_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ToolTip(shadow_y_slider, "Vertical shadow offset (pixels)")
         row += 1
 
         # Info label
@@ -724,60 +891,103 @@ class SettingsWindow:
         ttk.Checkbutton(tab, text="Show Seconds", variable=self.show_seconds_var,
                        command=self.apply_instant_preview).grid(row=2, column=0, sticky="w", padx=10, pady=5)
 
+        # Date Format Options
+        ttk.Label(tab, text="Date Format:", font=("Segoe UI", 10, "bold")).grid(
+            row=3, column=0, sticky="w", padx=10, pady=(20, 5)
+        )
+
+        date_formats = [
+            ("Full (Saturday, January 11)", "%A, %B %d"),
+            ("Short (Sat, Jan 11)", "%a, %b %d"),
+            ("Numeric (01/11/2025)", "%m/%d/%Y"),
+            ("ISO (2025-01-11)", "%Y-%m-%d"),
+            ("European (11 January 2025)", "%d %B %Y"),
+            ("Minimal (Jan 11)", "%b %d")
+        ]
+
+        self.date_format_map = {fmt[0]: fmt[1] for fmt in date_formats}
+        self.date_format_map_reverse = {fmt[1]: fmt[0] for fmt in date_formats}
+
+        current_date_format = self.config.get('display', 'date_format') or "%A, %B %d"
+        current_format_name = self.date_format_map_reverse.get(current_date_format, date_formats[0][0])
+
+        self.date_format_var = tk.StringVar(value=current_format_name)
+        date_format_combo = ttk.Combobox(tab, textvariable=self.date_format_var,
+                                         values=[fmt[0] for fmt in date_formats],
+                                         state="readonly", width=30)
+        date_format_combo.grid(row=4, column=0, sticky="w", padx=10, pady=5)
+        date_format_combo.bind("<<ComboboxSelected>>", lambda e: self.apply_instant_preview())
+        ToolTip(date_format_combo, "Choose how the date is displayed")
+
         # Sound Options
         ttk.Label(tab, text="Sound:", font=("Segoe UI", 10, "bold")).grid(
-            row=3, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=5, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         self.hourly_chime_var = tk.BooleanVar(value=self.config.get('display', 'hourly_chime'))
         ttk.Checkbutton(tab, text="Play sound at top of each hour", variable=self.hourly_chime_var).grid(
-            row=4, column=0, sticky="w", padx=10, pady=5
+            row=6, column=0, sticky="w", padx=10, pady=5
         )
+
+        # Behavior Options
+        ttk.Label(tab, text="Behavior:", font=("Segoe UI", 10, "bold")).grid(
+            row=7, column=0, sticky="w", padx=10, pady=(20, 5)
+        )
+
+        self.snap_to_edges_var = tk.BooleanVar(value=self.config.get('display', 'snap_to_edges'))
+        snap_check = ttk.Checkbutton(tab, text="Snap to screen edges", variable=self.snap_to_edges_var)
+        snap_check.grid(row=8, column=0, sticky="w", padx=10, pady=5)
+        ToolTip(snap_check, "Widget snaps to screen edges when dragged nearby")
 
         # Startup Options
         ttk.Label(tab, text="Startup:", font=("Segoe UI", 10, "bold")).grid(
-            row=5, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=9, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         self.launch_at_boot_var = tk.BooleanVar(value=self.config.get('display', 'launch_at_boot'))
         ttk.Checkbutton(tab, text="Launch at Windows Startup", variable=self.launch_at_boot_var).grid(
-            row=6, column=0, sticky="w", padx=10, pady=5
+            row=10, column=0, sticky="w", padx=10, pady=5
         )
 
         # Position Info
         ttk.Label(tab, text="Position:", font=("Segoe UI", 10, "bold")).grid(
-            row=7, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=11, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         current_x = self.config.get('position', 'x')
         current_y = self.config.get('position', 'y')
         ttk.Label(tab, text=f"Current: X={current_x}, Y={current_y}", font=("Segoe UI", 9)).grid(
-            row=8, column=0, sticky="w", padx=10, pady=5
+            row=12, column=0, sticky="w", padx=10, pady=5
         )
 
         ttk.Label(tab, text="Drag the widget to reposition.", font=("Segoe UI", 9), foreground="gray").grid(
-            row=9, column=0, sticky="w", padx=10, pady=5
+            row=13, column=0, sticky="w", padx=10, pady=5
         )
 
         # Reset to Default Position button
         ttk.Button(tab, text="Reset to Default (50, 50)", command=self.reset_position).grid(
-            row=10, column=0, sticky="w", padx=10, pady=10
+            row=14, column=0, sticky="w", padx=10, pady=10
         )
 
         # Info
         ttk.Label(tab, text="Format changes preview instantly.", font=("Segoe UI", 9), foreground="gray").grid(
-            row=11, column=0, sticky="w", padx=10, pady=20
+            row=15, column=0, sticky="w", padx=10, pady=20
         )
 
     def create_button_panel(self):
-        """Bottom button panel with Apply, Save, Cancel, Reset."""
+        """Bottom button panel with Apply, Save, Cancel, Reset, Import, Export."""
         button_frame = ttk.Frame(self.window)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Button(button_frame, text="Apply", command=self.on_apply, width=12).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Save", command=self.on_save, width=12).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancel", command=self.on_cancel, width=12).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Reset Defaults", command=self.on_reset, width=15).pack(side=tk.RIGHT, padx=5)
+        # Left side - main actions
+        ttk.Button(button_frame, text="Apply", command=self.on_apply, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(button_frame, text="Save", command=self.on_save, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(button_frame, text="Cancel", command=self.on_cancel, width=10).pack(side=tk.LEFT, padx=3)
+
+        # Right side - utility actions
+        ttk.Button(button_frame, text="Reset", command=self.on_reset, width=8).pack(side=tk.RIGHT, padx=3)
+        ttk.Button(button_frame, text="Export...", command=self.export_settings, width=10).pack(side=tk.RIGHT, padx=3)
+        ttk.Button(button_frame, text="Import...", command=self.import_settings, width=10).pack(side=tk.RIGHT, padx=3)
 
     # ==========================================
     #           EVENT HANDLERS
@@ -922,6 +1132,8 @@ class SettingsWindow:
 
         self.config.set('appearance', 'opacity', self.opacity_var.get())
         self.config.set('appearance', 'scale', self.scale_var.get())
+        self.config.set('appearance', 'shadow_offset_x', self.shadow_offset_x_var.get())
+        self.config.set('appearance', 'shadow_offset_y', self.shadow_offset_y_var.get())
 
         self.config.set('spacing', 'status_x', self.status_x_var.get())
         self.config.set('spacing', 'status_y', self.status_y_var.get())
@@ -934,6 +1146,12 @@ class SettingsWindow:
 
         self.config.set('display', 'use_24h_format', self.use_24h_var.get())
         self.config.set('display', 'show_seconds', self.show_seconds_var.get())
+        self.config.set('display', 'snap_to_edges', self.snap_to_edges_var.get())
+
+        # Update date format
+        selected_date_format = self.date_format_var.get()
+        if selected_date_format in self.date_format_map:
+            self.config.set('display', 'date_format', self.date_format_map[selected_date_format])
 
         # Refresh widget display
         self.parent_widget.apply_settings()
@@ -953,6 +1171,8 @@ class SettingsWindow:
         if selected_format_name in self.format_map:
             self.config.set('weather', 'display_format', self.format_map[selected_format_name])
         self.config.set('weather', 'show_attribution', self.show_weather_attribution_var.get())
+        self.config.set('weather', 'show_emoji', self.show_emoji_var.get())
+        self.config.set('weather', 'show_forecast', self.show_forecast_var.get())
 
         # Update sound settings
         self.config.set('display', 'hourly_chime', self.hourly_chime_var.get())
@@ -1036,3 +1256,84 @@ class SettingsWindow:
             return [self._deep_copy_dict(item) for item in obj]
         else:
             return obj
+
+    def on_theme_selected(self, event=None):
+        """Handle theme selection from dropdown."""
+        selected_name = self.theme_var.get()
+
+        if selected_name == "Custom":
+            return  # Don't apply anything for Custom
+
+        # Find theme ID by name
+        theme_id = None
+        for tid, theme in THEMES.items():
+            if theme["name"] == selected_name:
+                theme_id = tid
+                break
+
+        if theme_id:
+            # Apply theme to config
+            apply_theme_to_config(self.config, theme_id)
+
+            # Update UI variables to match theme
+            theme = get_theme(theme_id)
+
+            # Update color variables
+            if "colors" in theme:
+                self.text_color_var.set(theme["colors"].get("text", "#ffffff"))
+                self.shadow_color_var.set(theme["colors"].get("shadow", "#000000"))
+                self.status_color_var.set(theme["colors"].get("status", "#808080"))
+                self.time_color_var.set(theme["colors"].get("time_color", "#ffffff"))
+                self.date_color_var.set(theme["colors"].get("date_color", "#ffffff"))
+                self.weather_color_var.set(theme["colors"].get("weather_color", "#ffffff"))
+
+                # Update color buttons
+                self.text_color_btn.config(bg=self.text_color_var.get())
+                self.shadow_color_btn.config(bg=self.shadow_color_var.get())
+                self.status_color_btn.config(bg=self.status_color_var.get())
+                self.time_color_btn.config(bg=self.time_color_var.get())
+                self.date_color_btn.config(bg=self.date_color_var.get())
+                self.weather_color_btn.config(bg=self.weather_color_var.get())
+
+            # Update font family
+            if "fonts" in theme:
+                self.font_family_var.set(theme["fonts"].get("family", "Segoe UI"))
+
+            # Update opacity
+            if "appearance" in theme:
+                self.opacity_var.set(theme["appearance"].get("opacity", 1.0))
+
+            # Apply preview
+            self.apply_instant_preview()
+
+    def export_settings(self):
+        """Export current settings to a JSON file."""
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export Settings",
+            initialfile="timedateweather_settings.json"
+        )
+
+        if filepath:
+            if self.config.export_settings(filepath):
+                show_toast(self.window, "Settings exported successfully!", 2000, "success")
+            else:
+                show_toast(self.window, "Failed to export settings", 2000, "error")
+
+    def import_settings(self):
+        """Import settings from a JSON file."""
+        filepath = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Import Settings"
+        )
+
+        if filepath:
+            if self.config.import_settings(filepath):
+                # Reload all UI elements with new config
+                self.reload_all_settings()
+                # Apply changes to widget
+                self.parent_widget.apply_settings()
+                show_toast(self.window, "Settings imported successfully!", 2000, "success")
+            else:
+                show_toast(self.window, "Failed to import settings", 2000, "error")

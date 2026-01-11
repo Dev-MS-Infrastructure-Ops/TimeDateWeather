@@ -20,7 +20,10 @@ DEFAULT_INSTANCE_CONFIG = {
             "simple": "%C+%t",
             "detailed": "%C+%t+|+%w+|+%h",
             "minimal": "%t"
-        }
+        },
+        "show_emoji": True,
+        "show_forecast": False,
+        "forecast_days": 1
     },
     "fonts": {
         "family": "Segoe UI",
@@ -40,13 +43,19 @@ DEFAULT_INSTANCE_CONFIG = {
     },
     "appearance": {
         "opacity": 1.0,
-        "scale": 1.0
+        "scale": 1.0,
+        "shadow_offset_x": 2,
+        "shadow_offset_y": 2,
+        "theme": "default"
     },
     "display": {
         "use_24h_format": False,
         "show_seconds": False,
         "launch_at_boot": False,
-        "hourly_chime": False
+        "hourly_chime": False,
+        "date_format": "%A, %B %d",
+        "snap_to_edges": True,
+        "snap_distance": 15
     },
     "spacing": {
         "status_x": 0,
@@ -65,6 +74,11 @@ DEFAULT_INSTANCE_CONFIG = {
     "updates": {
         "time_interval": 1000,      # milliseconds
         "weather_interval": 1800000  # milliseconds (30 minutes)
+    },
+    "ui": {
+        "settings_border_color": "#ffff00",
+        "new_instance_color": "#00ff00",
+        "new_instance_color_dim": "#00aa00"
     }
 }
 
@@ -235,6 +249,26 @@ class ConfigManager:
             return [self._deep_copy(item) for item in obj]
         else:
             return obj
+
+    def export_settings(self, filepath):
+        """Export current instance settings to a file."""
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(self.config, f, indent=4)
+            return True
+        except IOError:
+            return False
+
+    def import_settings(self, filepath):
+        """Import settings from a file and merge with defaults."""
+        try:
+            with open(filepath, 'r') as f:
+                imported = json.load(f)
+            # Validate and merge with defaults to ensure all keys exist
+            self.config = self._merge_with_defaults(imported, DEFAULT_INSTANCE_CONFIG)
+            return True
+        except (IOError, json.JSONDecodeError):
+            return False
 
 
 # Convenience function for quick access

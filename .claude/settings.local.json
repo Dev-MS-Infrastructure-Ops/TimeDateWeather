@@ -4,7 +4,10 @@
       "Bash(python:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
-      "Bash(timeout 5 python:*)"
+      "Bash(timeout 5 python:*)",
+      "Bash(cd:*)",
+      "Bash(dir \"C:\\\\Users\\\\deske\\\\OneDrive - Mountain States Infrastructure\\\\MS-I 2025+\\\\Projects\\\\MS-I\\\\AI Apps\\\\TimeDateWeather\" /b)"
     ]
-  }
+  },
+  "outputStyle": "Explanatory"
 }

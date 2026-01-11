@@ -1,0 +1,20 @@
+# TimeDateWeather Desktop Widget - Requirements
+#
+# Core Dependencies: Python Standard Library Only
+# The main application uses only Python's built-in modules:
+# - tkinter (GUI)
+# - time (time display)
+# - threading (background operations)
+# - urllib.request (weather API)
+# - json (configuration)
+# - ctypes (Windows API)
+# - os, sys (system operations)
+# - winsound (audio notifications)
+
+# Build Dependencies (for creating .exe)
+pyinstaller>=6.0
+
+# Optional: System Tray Icon Support
+# Uncomment these if you want system tray functionality
+# pystray>=0.19.0
+# pillow>=10.0.0
