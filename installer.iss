@@ -3,8 +3,8 @@
 ; Download Inno Setup from: https://jrsoftware.org/isdl.php
 
 #define MyAppName "TimeDateWeather"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "MS-I"
+#define MyAppVersion "0.0.14"
+#define MyAppPublisher "MS-Infra"
 #define MyAppURL "https://github.com/your-repo/timedateweather"
 #define MyAppExeName "TimeDateWeather.exe"
 
