@@ -5,75 +5,111 @@ Provides pre-configured color and font combinations for quick styling.
 
 THEMES = {
     "default": {
-        "name": "Default",
-        "description": "Clean white text with black shadow",
+        "name": "Studio Glass",
+        "description": "Warm white with cool weather accents",
         "colors": {
-            "text": "#ffffff",
-            "shadow": "#000000",
-            "status": "#808080",
-            "time_color": "#ffffff",
-            "date_color": "#ffffff",
-            "weather_color": "#ffffff"
+            "text": "#f5f2ea",
+            "shadow": "#121212",
+            "status": "#8a8a8a",
+            "time_color": "#fefcf7",
+            "date_color": "#d8d2c6",
+            "weather_color": "#c7d3e8"
         },
         "fonts": {
-            "family": "Segoe UI"
+            "family": "Bahnschrift"
         },
         "appearance": {
             "opacity": 1.0
         }
     },
-    "dark_elegant": {
-        "name": "Dark Elegant",
-        "description": "Muted grays with refined aesthetics",
+    "noir_mint": {
+        "name": "Noir Mint",
+        "description": "Deep blacks with mint highlights",
         "colors": {
-            "text": "#e0e0e0",
-            "shadow": "#1a1a1a",
-            "status": "#666666",
-            "time_color": "#ffffff",
-            "date_color": "#b0b0b0",
-            "weather_color": "#a0a0a0"
+            "text": "#dffcf2",
+            "shadow": "#081715",
+            "status": "#5da79a",
+            "time_color": "#b8fff0",
+            "date_color": "#8ad6c5",
+            "weather_color": "#e7fff8"
         },
         "fonts": {
-            "family": "Segoe UI Light"
+            "family": "Cascadia Code"
+        },
+        "appearance": {
+            "opacity": 0.96
+        }
+    },
+    "cobalt_dawn": {
+        "name": "Cobalt Dawn",
+        "description": "Cool blues with crisp contrast",
+        "colors": {
+            "text": "#d9e8ff",
+            "shadow": "#0a1020",
+            "status": "#5e7bb3",
+            "time_color": "#ffffff",
+            "date_color": "#b6c9f0",
+            "weather_color": "#8ab4ff"
+        },
+        "fonts": {
+            "family": "Yu Gothic UI Semibold"
         },
         "appearance": {
             "opacity": 0.95
         }
     },
-    "ocean_blue": {
-        "name": "Ocean Blue",
-        "description": "Cool blue tones inspired by the sea",
+    "sunset_signal": {
+        "name": "Sunset Signal",
+        "description": "Warm amber with strong readability",
         "colors": {
-            "text": "#66ccff",
-            "shadow": "#001133",
-            "status": "#3399cc",
-            "time_color": "#99ddff",
-            "date_color": "#66ccff",
-            "weather_color": "#33aadd"
+            "text": "#ffd2a6",
+            "shadow": "#2a0f05",
+            "status": "#c18a5a",
+            "time_color": "#ffe0bf",
+            "date_color": "#f5b77f",
+            "weather_color": "#ff9b5f"
         },
         "fonts": {
-            "family": "Calibri"
+            "family": "Trebuchet MS"
         },
         "appearance": {
-            "opacity": 0.9
+            "opacity": 0.95
         }
     },
-    "warm_sunset": {
-        "name": "Warm Sunset",
-        "description": "Warm orange and amber tones",
+    "paper_ink": {
+        "name": "Paper Ink",
+        "description": "Soft paper with crisp ink",
         "colors": {
-            "text": "#ff9966",
-            "shadow": "#331100",
-            "status": "#cc6633",
-            "time_color": "#ffcc99",
-            "date_color": "#ff9966",
-            "weather_color": "#ff6633"
+            "text": "#1f1b16",
+            "shadow": "#e3ddcf",
+            "status": "#7b6e61",
+            "time_color": "#14110d",
+            "date_color": "#2d2620",
+            "weather_color": "#3b322a"
         },
         "fonts": {
             "family": "Georgia"
         },
         "appearance": {
-            "opacity": 0.9
+            "opacity": 0.92
+        }
+    },
+    "glacier": {
+        "name": "Glacier",
+        "description": "Cold light with steel shadow",
+        "colors": {
+            "text": "#eaf7ff",
+            "shadow": "#0b1a22",
+            "status": "#5c91a5",
+            "time_color": "#f8fdff",
+            "date_color": "#cfe9f5",
+            "weather_color": "#9ad4e6"
+        },
+        "fonts": {
+            "family": "Calibri Light"
+        },
+        "appearance": {
+            "opacity": 0.93
         }
     }
 }
@@ -84,7 +120,7 @@ def get_theme(theme_id):
     Get a theme by its ID.
 
     Args:
-        theme_id: The theme identifier (e.g., 'default', 'dark_elegant')
+        theme_id: The theme identifier (e.g., 'default', 'noir_mint')
 
     Returns:
         Theme dictionary or default theme if not found

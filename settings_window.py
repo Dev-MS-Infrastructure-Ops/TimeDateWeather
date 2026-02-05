@@ -29,18 +29,27 @@ class SettingsWindow:
         # Create window
         self.window = tk.Toplevel(parent_widget.root)
         self.window.title("Widget Settings")
-        self.window.geometry("500x650")
-        self.window.resizable(False, False)
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        window_width = min(560, screen_width - 80)
+        window_height = min(760, screen_height - 80)
+        self.window.geometry(f"{window_width}x{window_height}")
+        self.window.minsize(420, 520)
+        self.window.resizable(True, True)
 
         # Position window near the widget instead of primary monitor
         widget_x = parent_widget.root.winfo_x()
         widget_y = parent_widget.root.winfo_y()
         # Offset the settings window slightly to the right and down from widget
-        self.window.geometry(f"+{widget_x + 50}+{widget_y + 50}")
+        window_x = widget_x + 50
+        window_y = widget_y + 50
+        self.window.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
 
         # Make window modal (stays on top of widget)
         self.window.transient(parent_widget.root)
         self.window.grab_set()
+        self.window.attributes("-topmost", True)
+        self.window.lift()
 
         # Handle window close
         self.window.protocol("WM_DELETE_WINDOW", self.on_cancel)
@@ -53,7 +62,7 @@ class SettingsWindow:
 
         # Create tabbed interface
         self.notebook = ttk.Notebook(self.window)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.notebook.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Create tabs
         self.create_location_tab()
@@ -63,6 +72,9 @@ class SettingsWindow:
 
         # Bottom button panel
         self.create_button_panel()
+
+        # Ensure window is fully visible after layout
+        self._ensure_on_screen()
 
     def create_instance_selector(self):
         """Create instance selector at top of settings window."""
@@ -106,8 +118,7 @@ class SettingsWindow:
             if self.config.switch_instance(new_instance):
                 # Reload all settings for new instance
                 self.reload_all_settings()
-                messagebox.showinfo("Instance Switched",
-                                  f"Now editing settings for {new_instance}")
+                show_toast(self.window, f"Now editing {new_instance}", 2000, "info")
 
     def add_new_instance(self):
         """Add a new widget instance."""
@@ -132,8 +143,7 @@ class SettingsWindow:
 
             # Launch the new instance
             self.parent_widget.launch_new_instance()
-            messagebox.showinfo("Instance Created",
-                              f"New instance {new_instance_id} created and launched!")
+            show_toast(self.window, f"{new_instance_id} created and launched", 2500, "success")
 
     def remove_current_instance(self):
         """Remove the currently selected instance."""
@@ -141,15 +151,12 @@ class SettingsWindow:
 
         # Cannot remove last instance
         if len(self.config.get_all_instances()) <= 1:
-            messagebox.showwarning("Cannot Remove",
-                                 "Cannot remove the last instance. At least one must remain.")
+            show_toast(self.window, "Cannot remove the last instance", 2500, "warning")
             return
 
         # Cannot remove currently running widget's instance
         if current_instance == self.parent_widget.instance_id:
-            messagebox.showwarning("Cannot Remove",
-                                 "Cannot remove the current running instance.\n"
-                                 "Please switch to another instance first, or close this widget.")
+            show_toast(self.window, "Switch to another instance before removing this one", 3000, "warning")
             return
 
         # Confirm removal
@@ -171,8 +178,7 @@ class SettingsWindow:
                                 if all_instances:
                                     self.instance_var.set(all_instances[0])
                                 break
-                messagebox.showinfo("Instance Removed",
-                                  f"Instance {current_instance} has been removed.")
+                show_toast(self.window, f"{current_instance} removed", 2500, "success")
 
     def reload_all_settings(self):
         """Reload all settings from the currently selected instance."""
@@ -249,8 +255,10 @@ class SettingsWindow:
             self.use_24h_var.set(self.config.get('display', 'use_24h_format'))
             self.show_seconds_var.set(self.config.get('display', 'show_seconds'))
             self.hourly_chime_var.set(self.config.get('display', 'hourly_chime'))
+            self.weather_refresh_chime_var.set(self.config.get('display', 'weather_refresh_chime'))
             self.launch_at_boot_var.set(self.config.get('display', 'launch_at_boot'))
             self.snap_to_edges_var.set(self.config.get('display', 'snap_to_edges'))
+            self.click_through_locked_var.set(self.config.get('display', 'click_through_locked'))
 
             # Reload date format
             current_date_format = self.config.get('display', 'date_format') or "%A, %B %d"
@@ -427,12 +435,14 @@ class SettingsWindow:
 
         font_families = [
             "Segoe UI", "Segoe UI Black", "Segoe UI Light", "Segoe UI Semibold", "Segoe UI Semilight",
+            "Segoe UI Variable Display", "Segoe UI Variable Text",
+            "Bahnschrift", "Bahnschrift Light", "Bahnschrift SemiBold", "Bahnschrift SemiCondensed",
             "Arial", "Arial Black", "Arial Narrow",
             "Calibri", "Calibri Light",
             "Cambria", "Cambria Math",
             "Candara", "Candara Light",
             "Comic Sans MS",
-            "Consolas",
+            "Consolas", "Cascadia Code", "Cascadia Mono",
             "Constantia",
             "Corbel", "Corbel Light",
             "Courier", "Courier New",
@@ -929,55 +939,65 @@ class SettingsWindow:
             row=6, column=0, sticky="w", padx=10, pady=5
         )
 
+        self.weather_refresh_chime_var = tk.BooleanVar(value=self.config.get('display', 'weather_refresh_chime'))
+        ttk.Checkbutton(tab, text="Play sound when weather refreshes", variable=self.weather_refresh_chime_var).grid(
+            row=7, column=0, sticky="w", padx=10, pady=5
+        )
+
         # Behavior Options
         ttk.Label(tab, text="Behavior:", font=("Segoe UI", 10, "bold")).grid(
-            row=7, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=8, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         self.snap_to_edges_var = tk.BooleanVar(value=self.config.get('display', 'snap_to_edges'))
         snap_check = ttk.Checkbutton(tab, text="Snap to screen edges", variable=self.snap_to_edges_var)
-        snap_check.grid(row=8, column=0, sticky="w", padx=10, pady=5)
+        snap_check.grid(row=9, column=0, sticky="w", padx=10, pady=5)
         ToolTip(snap_check, "Widget snaps to screen edges when dragged nearby")
+
+        self.click_through_locked_var = tk.BooleanVar(value=self.config.get('display', 'click_through_locked'))
+        click_through_check = ttk.Checkbutton(tab, text="Click-through when locked", variable=self.click_through_locked_var)
+        click_through_check.grid(row=10, column=0, sticky="w", padx=10, pady=5)
+        ToolTip(click_through_check, "Let clicks pass through the widget when position is locked")
 
         # Startup Options
         ttk.Label(tab, text="Startup:", font=("Segoe UI", 10, "bold")).grid(
-            row=9, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=11, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         self.launch_at_boot_var = tk.BooleanVar(value=self.config.get('display', 'launch_at_boot'))
         ttk.Checkbutton(tab, text="Launch at Windows Startup", variable=self.launch_at_boot_var).grid(
-            row=10, column=0, sticky="w", padx=10, pady=5
+            row=12, column=0, sticky="w", padx=10, pady=5
         )
 
         # Position Info
         ttk.Label(tab, text="Position:", font=("Segoe UI", 10, "bold")).grid(
-            row=11, column=0, sticky="w", padx=10, pady=(20, 5)
+            row=13, column=0, sticky="w", padx=10, pady=(20, 5)
         )
 
         current_x = self.config.get('position', 'x')
         current_y = self.config.get('position', 'y')
         ttk.Label(tab, text=f"Current: X={current_x}, Y={current_y}", font=("Segoe UI", 9)).grid(
-            row=12, column=0, sticky="w", padx=10, pady=5
+            row=14, column=0, sticky="w", padx=10, pady=5
         )
 
         ttk.Label(tab, text="Drag the widget to reposition.", font=("Segoe UI", 9), foreground="gray").grid(
-            row=13, column=0, sticky="w", padx=10, pady=5
+            row=15, column=0, sticky="w", padx=10, pady=5
         )
 
         # Reset to Default Position button
         ttk.Button(tab, text="Reset to Default (50, 50)", command=self.reset_position).grid(
-            row=14, column=0, sticky="w", padx=10, pady=10
+            row=16, column=0, sticky="w", padx=10, pady=10
         )
 
         # Info
         ttk.Label(tab, text="Format changes preview instantly.", font=("Segoe UI", 9), foreground="gray").grid(
-            row=15, column=0, sticky="w", padx=10, pady=20
+            row=17, column=0, sticky="w", padx=10, pady=20
         )
 
     def create_button_panel(self):
         """Bottom button panel with Apply, Save, Cancel, Reset, Import, Export."""
         button_frame = ttk.Frame(self.window)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
 
         # Left side - main actions
         ttk.Button(button_frame, text="Apply", command=self.on_apply, width=10).pack(side=tk.LEFT, padx=3)
@@ -985,9 +1005,35 @@ class SettingsWindow:
         ttk.Button(button_frame, text="Cancel", command=self.on_cancel, width=10).pack(side=tk.LEFT, padx=3)
 
         # Right side - utility actions
+        ttk.Sizegrip(button_frame).pack(side=tk.RIGHT, padx=3)
         ttk.Button(button_frame, text="Reset", command=self.on_reset, width=8).pack(side=tk.RIGHT, padx=3)
         ttk.Button(button_frame, text="Export...", command=self.export_settings, width=10).pack(side=tk.RIGHT, padx=3)
         ttk.Button(button_frame, text="Import...", command=self.import_settings, width=10).pack(side=tk.RIGHT, padx=3)
+
+    def _ensure_on_screen(self):
+        """Keep the settings window fully visible."""
+        try:
+            self.window.update_idletasks()
+            screen_width = self.window.winfo_screenwidth()
+            screen_height = self.window.winfo_screenheight()
+            window_width = self.window.winfo_width()
+            window_height = self.window.winfo_height()
+            x = self.window.winfo_x()
+            y = self.window.winfo_y()
+            margin = 20
+
+            if x + window_width > screen_width - margin:
+                x = max(margin, screen_width - window_width - margin)
+            if y + window_height > screen_height - margin:
+                y = max(margin, screen_height - window_height - margin)
+            if x < margin:
+                x = margin
+            if y < margin:
+                y = margin
+
+            self.window.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
 
     # ==========================================
     #           EVENT HANDLERS
@@ -1147,6 +1193,7 @@ class SettingsWindow:
         self.config.set('display', 'use_24h_format', self.use_24h_var.get())
         self.config.set('display', 'show_seconds', self.show_seconds_var.get())
         self.config.set('display', 'snap_to_edges', self.snap_to_edges_var.get())
+        self.config.set('display', 'click_through_locked', self.click_through_locked_var.get())
 
         # Update date format
         selected_date_format = self.date_format_var.get()
@@ -1176,8 +1223,10 @@ class SettingsWindow:
 
         # Update sound settings
         self.config.set('display', 'hourly_chime', self.hourly_chime_var.get())
+        self.config.set('display', 'weather_refresh_chime', self.weather_refresh_chime_var.get())
 
-        # Update launch at boot setting
+        # Update click-through and startup settings
+        self.config.set('display', 'click_through_locked', self.click_through_locked_var.get())
         self.config.set('display', 'launch_at_boot', self.launch_at_boot_var.get())
         self.parent_widget.set_launch_at_boot(self.launch_at_boot_var.get())
 
@@ -1185,8 +1234,7 @@ class SettingsWindow:
         self.apply_instant_preview()
 
         # Clear status line positioning message
-        self.parent_widget.status_text = ""
-        self.parent_widget.update_status_ui()
+        self.parent_widget.clear_status_message()
 
         # Refresh weather with new location and format
         self.parent_widget.manual_weather_refresh()
@@ -1197,8 +1245,7 @@ class SettingsWindow:
         self.on_apply()
 
         # Clear status line positioning message
-        self.parent_widget.status_text = ""
-        self.parent_widget.update_status_ui()
+        self.parent_widget.clear_status_message()
 
         # Hide settings border
         self.parent_widget.show_settings_border(False)
@@ -1214,8 +1261,7 @@ class SettingsWindow:
         self.parent_widget.apply_settings()
 
         # Clear status line positioning message
-        self.parent_widget.status_text = ""
-        self.parent_widget.update_status_ui()
+        self.parent_widget.clear_status_message()
 
         # Hide settings border
         self.parent_widget.show_settings_border(False)
@@ -1235,8 +1281,7 @@ class SettingsWindow:
             self.parent_widget.apply_settings()
 
             # Clear status line positioning message
-            self.parent_widget.status_text = ""
-            self.parent_widget.update_status_ui()
+            self.parent_widget.clear_status_message()
 
             # Hide settings border
             self.parent_widget.show_settings_border(False)

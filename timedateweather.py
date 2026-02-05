@@ -3,15 +3,16 @@ from tkinter import messagebox
 import time
 import threading
 import urllib.request
-import json
 import ctypes
 import os
 import sys
 import winsound
 from config_manager import ConfigManager
+from app_logger import log_error, log_warning, log_info, log_debug, log_exception
 
 # Application version
 APP_VERSION = "1.0.0"
+WEATHER_TIMEOUT = 8
 
 # Weather condition to emoji mapping
 WEATHER_EMOJIS = {
@@ -76,6 +77,10 @@ class DesktopWidget:
         self.last_hour_chimed = -1  # Track last hour we played chime for
         self.drag_start_x = 0
         self.drag_start_y = 0
+        self.time_update_job = None
+        self.weather_fetch_lock = threading.Lock()
+        self.tray_icon = None
+        self.tray_thread = None
 
         # Window Setup
         self.root.overrideredirect(True)  # Remove borders
@@ -91,7 +96,7 @@ class DesktopWidget:
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
-            pass
+            log_debug("DPI awareness not available on this system")
 
         # Create context menu with keyboard shortcut hints
         self.context_menu = tk.Menu(self.root, tearoff=0)
@@ -116,13 +121,7 @@ class DesktopWidget:
         # Highlight border reference
         self.highlight_border = None
 
-        # Drag and lock bindings
-        self.root.bind("<Button-1>", self.start_drag)
-        self.root.bind("<B1-Motion>", self.on_drag)
-        self.root.bind("<ButtonRelease-1>", self.end_drag)  # Save position on drag end
-        self.root.bind("<Button-3>", self.show_context_menu)  # Right-click for menu
-
-        # Keyboard shortcuts
+        # Keyboard shortcuts (drag/menu bindings are on canvas below)
         self.root.bind("<Control-l>", self.toggle_lock)  # Ctrl+L to lock/unlock
         self.root.bind("<Control-r>", lambda e: self.manual_weather_refresh())  # Ctrl+R to refresh weather
         self.root.bind("<Control-s>", lambda e: self.open_settings())  # Ctrl+S for settings
@@ -150,28 +149,12 @@ class DesktopWidget:
         # Create invisible rectangle covering entire canvas to catch all mouse events
         self.canvas.create_rectangle(0, 0, self.canvas_width, self.canvas_height, fill="black", outline="", tags="clickarea")
 
-        # Bind ALL canvas events for complete coverage
-        # Use bind_all on canvas to catch events even when they hit text
-        self.canvas.bind("<Button-1>", self.start_drag, add="+")
-        self.canvas.bind("<B1-Motion>", self.on_drag, add="+")
-        self.canvas.bind("<ButtonRelease-1>", self.end_drag, add="+")
-        self.canvas.bind("<Button-3>", self.show_context_menu, add="+")
-
-        # Also bind to the clickarea rectangle
-        self.canvas.tag_bind("clickarea", "<Button-1>", self.start_drag, add="+")
-        self.canvas.tag_bind("clickarea", "<B1-Motion>", self.on_drag, add="+")
-        self.canvas.tag_bind("clickarea", "<ButtonRelease-1>", self.end_drag, add="+")
-        self.canvas.tag_bind("clickarea", "<Button-3>", self.show_context_menu, add="+")
-
-        # Bind to ALL canvas items (catch everything)
-        self.canvas.tag_bind("all", "<Button-3>", self.show_context_menu, add="+")
-        self.canvas.tag_bind("text", "<Button-1>", self.start_drag, add="+")
-        self.canvas.tag_bind("text", "<B1-Motion>", self.on_drag, add="+")
-        self.canvas.tag_bind("text", "<ButtonRelease-1>", self.end_drag, add="+")
-        self.canvas.tag_bind("shadow", "<Button-3>", self.show_context_menu, add="+")
-        self.canvas.tag_bind("shadow", "<Button-1>", self.start_drag, add="+")
-        self.canvas.tag_bind("shadow", "<B1-Motion>", self.on_drag, add="+")
-        self.canvas.tag_bind("shadow", "<ButtonRelease-1>", self.end_drag, add="+")
+        # Bind events once to the canvas - the clickarea rectangle ensures coverage
+        # Note: Only bind to canvas, not to individual tags, to prevent duplicate event firing
+        self.canvas.bind("<Button-1>", self.start_drag)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.end_drag)
+        self.canvas.bind("<Button-3>", self.show_context_menu)
 
         # Draw Text placeholders with proper spacing (scaled)
         # Status message appears at top (small, subtle)
@@ -182,21 +165,21 @@ class DesktopWidget:
         )
         # Time display (large, bold)
         time_color = self.config.get('colors', 'time_color') if not self.config.get('colors', 'lock_colors') else None
-        self.time_id = self.create_text(
+        self.time_id, self.time_shadow_id = self.create_text(
             int(self.config.get('spacing', 'time_x') * self.scale),
             int(self.config.get('spacing', 'time_y') * self.scale),
             "", self.config.get('fonts', 'time_size'), True, time_color
         )
         # Date display (medium spacing after time)
         date_color = self.config.get('colors', 'date_color') if not self.config.get('colors', 'lock_colors') else None
-        self.date_id = self.create_text(
+        self.date_id, self.date_shadow_id = self.create_text(
             int(self.config.get('spacing', 'date_x') * self.scale),
             int(self.config.get('spacing', 'date_y') * self.scale),
             "", self.config.get('fonts', 'date_size'), False, date_color
         )
         # Weather display (good spacing after date)
         weather_color = self.config.get('colors', 'weather_color') if not self.config.get('colors', 'lock_colors') else None
-        self.weather_id = self.create_text(
+        self.weather_id, self.weather_shadow_id = self.create_text(
             int(self.config.get('spacing', 'weather_x') * self.scale),
             int(self.config.get('spacing', 'weather_y') * self.scale),
             self.weather_text, self.config.get('fonts', 'weather_size'), False, weather_color
@@ -216,6 +199,12 @@ class DesktopWidget:
         if self.is_new_instance:
             self.show_new_instance_highlight()
 
+        # Ensure startup shortcut state matches config
+        self.set_launch_at_boot(self.config.get('display', 'launch_at_boot'))
+
+        # Start system tray icon (if available)
+        self._start_tray_icon()
+
         self.root.mainloop()
 
     def create_text(self, x, y, text, size, bold, color=None):
@@ -230,12 +219,20 @@ class DesktopWidget:
             color = self.config.get('colors', 'text')
 
         # Shadow (raise to top layer with shadow tag)
-        shadow = self.canvas.create_text(x+shadow_offset_x, y+shadow_offset_y, text=text, font=font_spec, fill=self.config.get('colors', 'shadow'), anchor="nw", tags=("shadow", f"shadow_{y}"))
-        self.canvas.tag_raise(shadow)
+        shadow_id = self.canvas.create_text(
+            x + shadow_offset_x,
+            y + shadow_offset_y,
+            text=text,
+            font=font_spec,
+            fill=self.config.get('colors', 'shadow'),
+            anchor="nw",
+            tags="shadow"
+        )
+        self.canvas.tag_raise(shadow_id)
         # Main Text (raise to top layer with text tag)
         text_id = self.canvas.create_text(x, y, text=text, font=font_spec, fill=color, anchor="nw", tags="text")
         self.canvas.tag_raise(text_id)
-        return text_id
+        return text_id, shadow_id
 
     def create_status_text(self, x, y, text):
         # Helper to draw status text (no shadow, smaller, 50% opacity gray) (scaled)
@@ -245,6 +242,23 @@ class DesktopWidget:
         text_id = self.canvas.create_text(x, y, text=text, font=font_spec, fill=self.config.get('colors', 'status'), anchor="nw", tags="text")
         self.canvas.tag_raise(text_id)
         return text_id
+
+    def _cancel_scheduled_time_update(self):
+        if self.time_update_job is not None:
+            try:
+                self.root.after_cancel(self.time_update_job)
+            except Exception:
+                pass
+            self.time_update_job = None
+
+    def _schedule_next_time_update(self, now):
+        if self.show_seconds:
+            interval_ms = self.config.get('updates', 'time_interval') or 1000
+            interval_ms = max(1000, int(interval_ms))
+        else:
+            seconds_to_next_minute = 60 - now.tm_sec
+            interval_ms = max(1000, int(seconds_to_next_minute * 1000))
+        self.time_update_job = self.root.after(interval_ms, self.update_time)
 
     def make_click_through(self, enable=True):
         # Uses Windows API to make the black background transparent AND click-through
@@ -293,7 +307,7 @@ class DesktopWidget:
 
     def toggle_lock(self, event=None):
         self.is_locked = self.lock_var.get()
-        self.make_click_through(self.is_locked)
+        self.make_click_through(self.is_locked and self.config.get('display', 'click_through_locked'))
 
         # Visual feedback: change opacity slightly when unlocked
         opacity = self.config.get('appearance', 'opacity')
@@ -342,6 +356,7 @@ class DesktopWidget:
         thread.start()
 
     def update_time(self):
+        self._cancel_scheduled_time_update()
         now = time.localtime()
         # Use 24-hour or 12-hour format based on preference, with or without seconds
         if self.use_24h:
@@ -370,12 +385,12 @@ class DesktopWidget:
 
         # Update Canvas Items with new Y positions
         self.canvas.itemconfigure(self.time_id, text=time_str)
-        self.canvas.itemconfigure(f"shadow_18", text=time_str)
+        self.canvas.itemconfigure(self.time_shadow_id, text=time_str)
 
         self.canvas.itemconfigure(self.date_id, text=date_str)
-        self.canvas.itemconfigure(f"shadow_75", text=date_str)
+        self.canvas.itemconfigure(self.date_shadow_id, text=date_str)
 
-        self.root.after(self.config.get('updates', 'time_interval'), self.update_time)
+        self._schedule_next_time_update(now)
 
     def get_weather(self):
         # Run in separate thread to prevent GUI freezing
@@ -386,23 +401,27 @@ class DesktopWidget:
         self.root.after(self.config.get('updates', 'weather_interval'), self.get_weather)
 
     def fetch_weather_data(self):
+        weather_success = False
+        if not self.weather_fetch_lock.acquire(False):
+            return
         try:
             # Using wttr.in (free, no API key required)
-            zip_code = self.config.get('location', 'zip_code')
+            zip_code = (self.config.get('location', 'zip_code') or "").strip()
+            country = (self.config.get('location', 'country') or "").strip()
+            location = f"{zip_code},{country}" if country else zip_code
 
             # Check if forecast is enabled
             if self.config.get('weather', 'show_forecast'):
                 # Fetch forecast data (today + tomorrow)
-                forecast_days = self.config.get('weather', 'forecast_days') or 1
-                url = f"https://wttr.in/{zip_code}?format=%C+%t+%w"
+                url = f"https://wttr.in/{location}?format=%C+%t+%w"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
+                with urllib.request.urlopen(req, timeout=WEATHER_TIMEOUT) as response:
                     today_data = response.read().decode("utf-8").strip()
 
                 # Get tomorrow's forecast
-                url_tomorrow = f"https://wttr.in/{zip_code}?format=%C+%t&1"
+                url_tomorrow = f"https://wttr.in/{location}?format=%C+%t&1"
                 req_tomorrow = urllib.request.Request(url_tomorrow, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req_tomorrow) as response:
+                with urllib.request.urlopen(req_tomorrow, timeout=WEATHER_TIMEOUT) as response:
                     tomorrow_data = response.read().decode("utf-8").strip()
 
                 data = f"{today_data} | Tomorrow: {tomorrow_data}"
@@ -412,9 +431,9 @@ class DesktopWidget:
                 format_strings = self.config.get('weather', 'format_strings')
                 format_string = format_strings.get(display_format, "%C+%t+%w")
 
-                url = f"https://wttr.in/{zip_code}?format={format_string}"
+                url = f"https://wttr.in/{location}?format={format_string}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
+                with urllib.request.urlopen(req, timeout=WEATHER_TIMEOUT) as response:
                     data = response.read().decode("utf-8").strip()
 
             # Add weather emoji if enabled
@@ -422,11 +441,20 @@ class DesktopWidget:
                 data = self._add_weather_emoji(data)
 
             self.weather_text = data
+            weather_success = True
         except Exception as e:
             self.weather_text = "Weather Unavailable"
+            log_warning(f"Weather fetch failed: {e}")
+        finally:
+            self.weather_fetch_lock.release()
 
         # Schedule UI update on main thread
         self.root.after(0, self.update_weather_ui)
+        if weather_success:
+            if self.config.get('weather', 'show_attribution'):
+                self.root.after(0, self._maybe_show_attribution)
+            if self.config.get('display', 'weather_refresh_chime'):
+                self.play_weather_refresh_chime()
 
     def _add_weather_emoji(self, weather_text):
         """Add emoji based on weather condition in the text."""
@@ -438,11 +466,15 @@ class DesktopWidget:
 
     def update_weather_ui(self):
         self.canvas.itemconfigure(self.weather_id, text=self.weather_text)
-        self.canvas.itemconfigure(f"shadow_100", text=self.weather_text)
+        self.canvas.itemconfigure(self.weather_shadow_id, text=self.weather_text)
 
     def update_status_ui(self):
         # Update status text only (no shadow for status messages)
         self.canvas.itemconfigure(self.status_id, text=self.status_text)
+
+    def _maybe_show_attribution(self):
+        if not self.status_text:
+            self.show_status_message("Weather from wttr.in", 4000)
 
     def play_hourly_chime(self):
         """Play a sound notification at the top of the hour."""
@@ -462,14 +494,110 @@ class DesktopWidget:
         except Exception:
             pass  # Silent failure
 
+    def play_weather_refresh_chime(self):
+        """Play a sound notification when weather refreshes."""
+        try:
+            def play_sound():
+                try:
+                    winsound.Beep(800, 120)
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=play_sound)
+            thread.daemon = True
+            thread.start()
+        except Exception:
+            pass
+
+    def _start_tray_icon(self):
+        try:
+            import pystray
+            from pystray import MenuItem as item
+            from PIL import Image, ImageDraw
+        except ImportError:
+            log_debug("pystray or PIL not available - tray icon disabled")
+            return
+
+        if self.tray_icon is not None:
+            return
+
+        icon_title = f"TimeDateWeather ({self.instance_id})"
+        image = self._create_tray_image(Image, ImageDraw)
+
+        def show_widget():
+            self.root.after(0, self._show_widget)
+
+        def hide_widget():
+            self.root.after(0, self._hide_widget)
+
+        def open_settings():
+            self.root.after(0, self.open_settings)
+
+        def refresh_weather():
+            self.root.after(0, self.manual_weather_refresh)
+
+        def exit_app():
+            self.root.after(0, self.on_exit)
+
+        menu = pystray.Menu(
+            item("Show Widget", show_widget),
+            item("Hide Widget", hide_widget),
+            item("Settings", open_settings),
+            item("Refresh Weather", refresh_weather),
+            item("Exit", exit_app)
+        )
+
+        self.tray_icon = pystray.Icon("TimeDateWeather", image, icon_title, menu)
+        if hasattr(self.tray_icon, "run_detached"):
+            self.tray_icon.run_detached()
+        else:
+            self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            self.tray_thread.start()
+
+    def _stop_tray_icon(self):
+        if self.tray_icon is None:
+            return
+        try:
+            self.tray_icon.stop()
+        except Exception:
+            pass
+        self.tray_icon = None
+
+    def _create_tray_image(self, Image, ImageDraw):
+        size = 32
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+
+        draw.ellipse((1, 1, size - 2, size - 2), fill="#1f2933")
+        draw.ellipse((8, 8, size - 8, size - 8), outline="#f5f2ea", width=2)
+        draw.line((16, 16, 16, 10), fill="#f5f2ea", width=2)
+        draw.line((16, 16, 21, 19), fill="#f5f2ea", width=2)
+        draw.ellipse((21, 6, 26, 11), fill="#6dd0b7")
+
+        return image
+
+    def _show_widget(self):
+        try:
+            if not self.root.winfo_viewable():
+                self.root.deiconify()
+            self.root.lift()
+        except Exception:
+            pass
+
+    def _hide_widget(self):
+        try:
+            if self.root.winfo_viewable():
+                self.root.withdraw()
+        except Exception:
+            pass
+
     def open_settings(self):
         """Open the settings window."""
         try:
             from settings_window import SettingsWindow
             SettingsWindow(self)
         except Exception as e:
-            # Silent failure - no error dialogs
-            pass
+            log_error(f"Failed to open settings window: {e}")
 
     def show_about(self):
         """Show the About dialog with version and shortcut information."""
@@ -491,7 +619,6 @@ Features:
   \u2022 Theme presets
   \u2022 Weather emojis
   \u2022 Hourly chime
-  \u2022 Auto-start with Windows
 
 Right-click the widget for quick options."""
         messagebox.showinfo("About TimeDateWeather", about_text)
@@ -688,12 +815,7 @@ Right-click the widget for quick options."""
 
             # Recreate clickarea with new size
             self.canvas.create_rectangle(0, 0, self.canvas_width, self.canvas_height, fill="black", outline="", tags="clickarea")
-
-            # Bind events to new clickarea
-            self.canvas.tag_bind("clickarea", "<Button-1>", self.start_drag)
-            self.canvas.tag_bind("clickarea", "<B1-Motion>", self.on_drag)
-            self.canvas.tag_bind("clickarea", "<ButtonRelease-1>", self.end_drag)
-            self.canvas.tag_bind("clickarea", "<Button-3>", self.show_context_menu)
+            # Note: Canvas-level bindings persist through delete("all"), no need to rebind
 
             # Recreate text elements with scaled positions
             self.status_id = self.create_status_text(
@@ -703,29 +825,64 @@ Right-click the widget for quick options."""
             )
             # Use individual colors if unlocked
             time_color = self.config.get('colors', 'time_color') if not self.config.get('colors', 'lock_colors') else None
-            self.time_id = self.create_text(
+            self.time_id, self.time_shadow_id = self.create_text(
                 int(self.config.get('spacing', 'time_x') * self.scale),
                 int(self.config.get('spacing', 'time_y') * self.scale),
                 "", self.config.get('fonts', 'time_size'), True, time_color
             )
             date_color = self.config.get('colors', 'date_color') if not self.config.get('colors', 'lock_colors') else None
-            self.date_id = self.create_text(
+            self.date_id, self.date_shadow_id = self.create_text(
                 int(self.config.get('spacing', 'date_x') * self.scale),
                 int(self.config.get('spacing', 'date_y') * self.scale),
                 "", self.config.get('fonts', 'date_size'), False, date_color
             )
             weather_color = self.config.get('colors', 'weather_color') if not self.config.get('colors', 'lock_colors') else None
-            self.weather_id = self.create_text(
+            self.weather_id, self.weather_shadow_id = self.create_text(
                 int(self.config.get('spacing', 'weather_x') * self.scale),
                 int(self.config.get('spacing', 'weather_y') * self.scale),
                 self.weather_text, self.config.get('fonts', 'weather_size'), False, weather_color
             )
 
+            # Update click-through state to match current settings
+            self.make_click_through(self.is_locked and self.config.get('display', 'click_through_locked'))
+
             # Force immediate time update to show new settings
             self.update_time()
             self.update_weather_ui()
+        except Exception as e:
+            log_error(f"Error applying settings: {e}")
+
+    def set_launch_at_boot(self, enable):
+        """Enable or disable launch at Windows startup."""
+        try:
+            appdata = os.environ.get('APPDATA')
+            if not appdata:
+                return
+
+            startup_folder = os.path.join(
+                appdata,
+                r'Microsoft\Windows\Start Menu\Programs\Startup'
+            )
+
+            shortcut_path = os.path.join(startup_folder, 'TimeDateWeather.lnk')
+            batch_path = os.path.join(startup_folder, 'TimeDateWeather.bat')
+
+            if enable:
+                # Remove any existing shortcut and create a lightweight batch entry.
+                if os.path.exists(shortcut_path):
+                    os.remove(shortcut_path)
+                script_path = os.path.abspath(__file__)
+                with open(batch_path, 'w') as f:
+                    if getattr(sys, 'frozen', False):
+                        f.write(f'@echo off\nstart "" "{sys.executable}"\n')
+                    else:
+                        f.write(f'@echo off\nstart "" "{sys.executable}" "{script_path}"\n')
+            else:
+                if os.path.exists(batch_path):
+                    os.remove(batch_path)
+                if os.path.exists(shortcut_path):
+                    os.remove(shortcut_path)
         except Exception:
-            # Silent failure
             pass
 
     def save_current_position(self):
@@ -739,73 +896,8 @@ Right-click the widget for quick options."""
             # Update tracking variables
             self.last_saved_position = (x, y)
             self.position_changed_since_save = False
-        except Exception:
-            # Silent failure - no dialogs on error (handles force close gracefully)
-            pass
-
-    def set_launch_at_boot(self, enable):
-        """Enable or disable launch at Windows startup."""
-        try:
-            # Get path to Windows startup folder
-            startup_folder = os.path.join(
-                os.environ['APPDATA'],
-                r'Microsoft\Windows\Start Menu\Programs\Startup'
-            )
-
-            # Name of the shortcut file
-            shortcut_name = 'TimeDateWeather.lnk'
-            shortcut_path = os.path.join(startup_folder, shortcut_name)
-
-            if enable:
-                # Create shortcut using Windows Script Host
-                import winshell
-                from win32com.client import Dispatch
-
-                # Get path to this script or executable
-                if getattr(sys, 'frozen', False):
-                    # Running as compiled executable
-                    target_path = sys.executable
-                else:
-                    # Running as script
-                    target_path = sys.executable  # python.exe
-                    arguments = f'"{os.path.abspath(__file__)}"'
-
-                # Create shortcut
-                shell = Dispatch('WScript.Shell')
-                shortcut = shell.CreateShortCut(shortcut_path)
-                shortcut.TargetPath = target_path
-                if not getattr(sys, 'frozen', False):
-                    shortcut.Arguments = arguments
-                shortcut.WorkingDirectory = os.path.dirname(os.path.abspath(__file__))
-                shortcut.IconLocation = target_path
-                shortcut.save()
-
-            else:
-                # Remove shortcut if it exists
-                if os.path.exists(shortcut_path):
-                    os.remove(shortcut_path)
-
-        except ImportError:
-            # winshell or pywin32 not available, try alternative method
-            try:
-                if enable:
-                    # Create a batch file as fallback
-                    batch_path = os.path.join(startup_folder, 'TimeDateWeather.bat')
-                    script_path = os.path.abspath(__file__)
-                    with open(batch_path, 'w') as f:
-                        if getattr(sys, 'frozen', False):
-                            f.write(f'@echo off\nstart "" "{sys.executable}"\n')
-                        else:
-                            f.write(f'@echo off\nstart "" "{sys.executable}" "{script_path}"\n')
-                else:
-                    # Remove batch file
-                    batch_path = os.path.join(startup_folder, 'TimeDateWeather.bat')
-                    if os.path.exists(batch_path):
-                        os.remove(batch_path)
-            except Exception:
-                pass  # Silent failure
-        except Exception:
-            pass  # Silent failure
+        except Exception as e:
+            log_warning(f"Could not save position: {e}")
 
     def launch_new_instance(self):
         """Launch a new widget instance."""
@@ -856,6 +948,7 @@ Right-click the widget for quick options."""
     def on_exit(self):
         """Handle application exit with smart position save dialog."""
         try:
+            self._stop_tray_icon()
             # Check if position has changed since last save
             current_x = self.root.winfo_x()
             current_y = self.root.winfo_y()
@@ -880,13 +973,15 @@ Right-click the widget for quick options."""
             # Exit application
             self.root.quit()
             self.root.destroy()
-        except Exception:
-            # Silent failure - force quit if any error
+        except Exception as e:
+            log_error(f"Error during exit: {e}")
+            # Force quit if any error
             try:
+                self._stop_tray_icon()
                 self.root.quit()
                 self.root.destroy()
-            except:
-                pass
+            except Exception:
+                log_exception("Force quit also failed")
 
 def launch_all_active_instances():
     """Launch all active instances on startup."""

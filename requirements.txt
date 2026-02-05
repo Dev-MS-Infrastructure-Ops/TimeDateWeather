@@ -14,7 +14,6 @@
 # Build Dependencies (for creating .exe)
 pyinstaller>=6.0
 
-# Optional: System Tray Icon Support
-# Uncomment these if you want system tray functionality
-# pystray>=0.19.0
-# pillow>=10.0.0
+# System Tray Icon Support
+pystray>=0.19.0
+pillow>=10.0.0

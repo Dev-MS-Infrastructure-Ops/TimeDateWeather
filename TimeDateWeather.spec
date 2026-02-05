@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['tkinter', 'tkinter.ttk', 'tkinter.colorchooser', 'tkinter.filedialog', 'tkinter.messagebox'],
+    hiddenimports=['tkinter', 'tkinter.ttk', 'tkinter.colorchooser', 'tkinter.filedialog', 'tkinter.messagebox', 'pystray', 'PIL', 'PIL.Image', 'PIL.ImageDraw'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,4 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version='C:\\Users\\deske\\OneDrive - Mountain States Infrastructure\\MS-I 2025+\\Projects\\MS-I\\AI Apps\\TimeDateWeather\\version_info.txt',
 )

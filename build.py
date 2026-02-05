@@ -24,6 +24,7 @@ MAIN_SCRIPT = "timedateweather.py"
 BUILD_DIR = "build"
 DIST_DIR = "dist"
 SPEC_FILE = f"{APP_NAME}.spec"
+CLEAN_PYINSTALLER = False
 
 # Icon path (create an icon or use None for default)
 ICON_PATH = None  # Set to "icon.ico" if you have an icon file
@@ -36,8 +37,11 @@ def clean_build():
 
     for dir_name in dirs_to_remove:
         if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
-            print(f"  Removed: {dir_name}")
+            try:
+                shutil.rmtree(dir_name)
+                print(f"  Removed: {dir_name}")
+            except Exception as e:
+                print(f"  Warning: Could not remove {dir_name} ({e})")
 
     if os.path.exists(SPEC_FILE):
         os.remove(SPEC_FILE)
@@ -47,8 +51,12 @@ def clean_build():
     for root, dirs, files in os.walk("."):
         for dir_name in dirs:
             if dir_name == "__pycache__":
-                shutil.rmtree(os.path.join(root, dir_name))
-                print(f"  Removed: {os.path.join(root, dir_name)}")
+                pycache_path = os.path.join(root, dir_name)
+                try:
+                    shutil.rmtree(pycache_path)
+                    print(f"  Removed: {pycache_path}")
+                except Exception as e:
+                    print(f"  Warning: Could not remove {pycache_path} ({e})")
 
 
 def build_executable():
@@ -71,14 +79,20 @@ def build_executable():
         "--name", APP_NAME,
         "--onefile",           # Single executable
         "--windowed",          # No console window
-        "--clean",             # Clean PyInstaller cache
         "--noconfirm",         # Replace output without asking
     ]
+    if CLEAN_PYINSTALLER:
+        cmd.append("--clean")  # Clean PyInstaller cache
 
     # Add icon if available
     if ICON_PATH and os.path.exists(ICON_PATH):
         cmd.extend(["--icon", ICON_PATH])
         print(f"Using icon: {ICON_PATH}")
+
+    # Add version info if available
+    version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version_info.txt")
+    if os.path.exists(version_file):
+        cmd.extend(["--version-file", version_file])
 
     # Add hidden imports for modules that PyInstaller might miss
     hidden_imports = [
@@ -87,6 +101,10 @@ def build_executable():
         "tkinter.colorchooser",
         "tkinter.filedialog",
         "tkinter.messagebox",
+        "pystray",
+        "PIL",
+        "PIL.Image",
+        "PIL.ImageDraw",
     ]
     for imp in hidden_imports:
         cmd.extend(["--hidden-import", imp])

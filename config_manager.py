@@ -6,6 +6,15 @@ Handles loading, saving, and validating settings from JSON file.
 import json
 import os
 
+# Try to import logging, but don't fail if not available yet
+try:
+    from app_logger import log_error, log_warning, log_info
+except ImportError:
+    # Fallback to no-op functions if logger not available
+    def log_error(msg, exc_info=None): pass
+    def log_warning(msg): pass
+    def log_info(msg): pass
+
 # Default configuration for a single instance
 DEFAULT_INSTANCE_CONFIG = {
     "location": {
@@ -26,20 +35,20 @@ DEFAULT_INSTANCE_CONFIG = {
         "forecast_days": 1
     },
     "fonts": {
-        "family": "Segoe UI",
+        "family": "Bahnschrift",
         "time_size": 48,
         "date_size": 16,
         "weather_size": 16,
         "status_size": 11
     },
     "colors": {
-        "text": "#ffffff",
-        "status": "#808080",
-        "shadow": "#000000",
+        "text": "#f5f2ea",
+        "status": "#8a8a8a",
+        "shadow": "#121212",
         "lock_colors": True,
-        "time_color": "#ffffff",
-        "date_color": "#ffffff",
-        "weather_color": "#ffffff"
+        "time_color": "#fefcf7",
+        "date_color": "#d8d2c6",
+        "weather_color": "#c7d3e8"
     },
     "appearance": {
         "opacity": 1.0,
@@ -53,6 +62,8 @@ DEFAULT_INSTANCE_CONFIG = {
         "show_seconds": False,
         "launch_at_boot": False,
         "hourly_chime": False,
+        "weather_refresh_chime": False,
+        "click_through_locked": False,
         "date_format": "%A, %B %d",
         "snap_to_edges": True,
         "snap_distance": 15
@@ -124,7 +135,7 @@ class ConfigManager:
                     DEFAULT_INSTANCE_CONFIG
                 )
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load config file ({e}). Using defaults.")
+                log_warning(f"Could not load config file ({e}). Using defaults.")
                 self.root_config = self._deep_copy(DEFAULT_ROOT_CONFIG)
                 self.config = self._deep_copy(DEFAULT_INSTANCE_CONFIG)
         else:
@@ -260,16 +271,30 @@ class ConfigManager:
             return False
 
     def import_settings(self, filepath):
-        """Import settings from a file and merge with defaults."""
+        """Import settings from a file into the current instance."""
         try:
             with open(filepath, 'r') as f:
-                imported = json.load(f)
-            # Validate and merge with defaults to ensure all keys exist
-            self.config = self._merge_with_defaults(imported, DEFAULT_INSTANCE_CONFIG)
-            return True
-        except (IOError, json.JSONDecodeError):
-            return False
+                data = json.load(f)
 
+            if not isinstance(data, dict):
+                return False
+
+            if "instances" in data:
+                instances = data.get("instances", {})
+                if not isinstance(instances, dict) or not instances:
+                    return False
+                instance_data = instances.get(self.instance_id) or next(iter(instances.values()))
+            else:
+                instance_data = data
+
+            if not isinstance(instance_data, dict):
+                return False
+
+            self.config = self._merge_with_defaults(instance_data, DEFAULT_INSTANCE_CONFIG)
+            self.root_config["instances"][self.instance_id] = self.config
+            return self.save()
+        except (IOError, json.JSONDecodeError, TypeError, ValueError):
+            return False
 
 # Convenience function for quick access
 def load_config(config_file=CONFIG_FILE):
